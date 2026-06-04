@@ -265,60 +265,72 @@ Streamlit Dashboard (10s live refresh)
 store-intelligence/
 ├── app/
 │   ├── api/
-│   │   ├── ingest.py       ← POST /events/ingest
-│   │   ├── metrics.py      ← GET /stores/{id}/metrics
-│   │   ├── funnel.py       ← GET /stores/{id}/funnel
-│   │   ├── heatmap.py      ← GET /stores/{id}/heatmap
-│   │   ├── anomalies.py    ← GET /stores/{id}/anomalies
-│   │   ├── health.py       ← GET /health
-│   │   ├── cv.py           ← GET /cv/summary,zones,dwell
-│   │   └── debug.py        ← GET /debug/sessions
+│   │   ├── ingest.py            ← POST /events/ingest
+│   │   ├── ingest_raw.py        ← POST /events/ingest/raw (translates sample data)
+│   │   ├── metrics.py           ← GET /stores/{id}/metrics
+│   │   ├── funnel.py            ← GET /stores/{id}/funnel
+│   │   ├── heatmap.py           ← GET /stores/{id}/heatmap
+│   │   ├── anomalies.py         ← GET /stores/{id}/anomalies
+│   │   ├── health.py            ← GET /health
+│   │   ├── cv.py                ← GET /cv/summary,zones,dwell
+│   │   ├── stores.py            ← GET /stores (for dashboard dropdown)
+│   │   └── debug.py             ← GET /debug/sessions
 │   ├── models/
-│   │   ├── event.py        ← Pydantic ingest model
-│   │   ├── db_event.py     ← SQLAlchemy EventDB
-│   │   ├── session.py      ← SQLAlchemy SessionDB
-│   │   ├── pos_transaction.py
-│   │   └── cv_event.py     ← Legacy CV events table
+│   │   ├── event.py             ← Pydantic ingest model
+│   │   ├── response.py          ← Pydantic response models
+│   │   ├── db_event.py          ← SQLAlchemy EventDB
+│   │   ├── session.py           ← SQLAlchemy SessionDB
+│   │   ├── pos_transaction.py   ← SQLAlchemy POSTransaction
+│   │   └── cv_event.py          ← Legacy CV events table
 │   ├── services/
 │   │   ├── session_service.py   ← Session lifecycle from events
 │   │   ├── metrics_service.py   ← KPI computation + POS correlation
 │   │   ├── funnel_service.py    ← 4-stage funnel
 │   │   ├── heatmap_service.py   ← Normalised zone heatmap
 │   │   └── anomaly_service.py   ← 5 anomaly detectors
-│   ├── database.py
-│   └── main.py             ← FastAPI app + middleware
+│   ├── database.py              ← DB Engine and SessionLocal
+│   └── main.py                  ← FastAPI app + middleware
 ├── pipeline/
-│   ├── run_pipeline.py     ← Master runner (all clips → API)
-│   ├── detector.py         ← YOLOv8 + ByteTrack wrapper
-│   ├── event_generator.py  ← Frame detections → structured events
-│   ├── session_manager.py  ← In-pipeline visitor session state
-│   ├── run_entry_event.py  ← Legacy: entry detection script
-│   ├── run_zone.py         ← Legacy: zone tracking script
-│   ├── run_dwell_time.py   ← Legacy: dwell time script
-│   └── inputs/             ← Place mp4 clips here
+│   ├── run_pipeline.py          ← Master runner (all clips → API)
+│   ├── detector.py              ← YOLOv8 + ByteTrack wrapper
+│   ├── event_generator.py       ← Frame detections → structured events
+│   ├── session_manager.py       ← In-pipeline visitor session state
+│   ├── simulate_realtime.py     ← Replay events in simulated real-time
+│   ├── event_writer.py          ← Legacy: DB writer for CV events
+│   ├── tracker.py               ← ByteTrack instance setup
+│   ├── zone_utils.py            ← Helper for point-in-polygon
+│   ├── zones.py                 ← Hardcoded zone coordinates
+│   ├── run_entry_event.py       ← Legacy: entry detection script
+│   ├── run_zone.py              ← Legacy: zone tracking script
+│   ├── run_dwell_time.py        ← Legacy: dwell time script
+│   └── inputs/                  ← Place mp4 clips here
 ├── dashboard/
-│   └── streamlit_app.py    ← Live dashboard (10s auto-refresh)
+│   └── streamlit_app.py         ← Live dashboard (10s auto-refresh)
 ├── data/
-│   ├── store_layout.json   ← Zone definitions per store
+│   ├── store_layout.json        ← Zone definitions per store
 │   └── POS - sample transactionsb1e826f.csv
 ├── scripts/
-│   ├── load_pos.py         ← Load POS CSV into DB
-│   └── check_cv_events.py  ← Inspect CV events in DB
+│   ├── load_pos.py              ← Load POS CSV into DB
+│   ├── load_sample_events.py    ← Post sample JSONL to API
+│   ├── replay_events.py         ← Replay JSONL to ingest endpoint
+│   ├── check_cv_events.py       ← Inspect CV events in DB
+│   └── test_cv_event.py         ← Quick DB insert test
 ├── tests/
+│   ├── conftest.py              ← Pytest fixtures & isolated DB setup
 │   ├── test_ingest.py
 │   ├── test_metrics.py
 │   ├── test_funnel.py
 │   ├── test_heatmap.py
 │   ├── test_anomalies.py
 │   └── test_health.py
-├── Dockerfile
-├── Dockerfile.dashboard
-├── docker-compose.yml
-├── run.sh / run.bat        ← One-command pipeline runner
-├── DESIGN.md
-├── CHOICES.md
-└── requirements.txt
-```
+├── assertions.py                ← Acceptance gate check script
+├── Dockerfile                   ← API container build
+├── Dockerfile.dashboard         ← Dashboard container build
+├── docker-compose.yml           ← Multi-container orchestration
+├── run.sh / run.bat             ← One-command pipeline runners
+├── DESIGN.md                    ← Architecture & engineering decisions
+├── CHOICES.md                   ← Explanations of AI suggestions vs. choices
+└── requirements.txt             ← Python dependencies```
 
 ---
 
