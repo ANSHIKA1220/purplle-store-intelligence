@@ -3,10 +3,9 @@ __pycache__/
 *.pyc
 
 store_intelligence.db
+*.db
 
 data/
-videos/
-outputs/
 
 .idea/
 .vscode/
@@ -16,3 +15,8 @@ outputs/
 *.mov
 
 .env
+
+pipeline/outputs/
+
+yolov8n.pt
+*.pt

@@ -10,6 +10,7 @@ from app.api.debug import router as debug_router
 from app.api.funnel import router as funnel_router
 from app.api.heatmap import router as heatmap_router
 from app.api.anomalies import router as anomalies_router
+from app.models.cv_event import CVEvent
 app = FastAPI(
     title="Store Intelligence API"
 )
