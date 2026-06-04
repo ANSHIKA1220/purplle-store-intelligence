@@ -11,6 +11,7 @@ from app.api.funnel import router as funnel_router
 from app.api.heatmap import router as heatmap_router
 from app.api.anomalies import router as anomalies_router
 from app.models.cv_event import CVEvent
+from app.api.cv import router as cv_router
 app = FastAPI(
     title="Store Intelligence API"
 )
@@ -20,6 +21,7 @@ app.include_router(debug_router)
 app.include_router(funnel_router)
 app.include_router(heatmap_router)
 app.include_router(anomalies_router)
+app.include_router(cv_router)
 Base.metadata.create_all(bind=engine)
 
 
