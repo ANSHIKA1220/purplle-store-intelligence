@@ -1,429 +1,343 @@
-# Purplle Store Intelligence System
+# Store Intelligence API
 
-## Overview
+Real-time retail analytics — from raw CCTV footage to live store metrics.
 
-An AI-powered Store Intelligence System built for the Purplle Tech Challenge 2026.
-
-The system processes CCTV footage from retail stores, generates visitor and movement events, persists them into a database, and exposes analytics through production-style APIs.
-
-The goal is to transform raw store surveillance footage into actionable business intelligence such as:
-
-* Footfall analytics
-* Visitor conversion insights
-* Zone engagement analysis
-* Customer dwell-time analysis
-* Revenue correlation
-* Store performance metrics
+Built for the Apex Retail engineering challenge: processes CCTV clips with YOLOv8 + ByteTrack, emits structured behavioural events, and exposes a production-ready analytics API with a live Streamlit dashboard.
 
 ---
 
-## Problem Statement
+## Quick Start (5 commands)
 
-Retail stores generate large volumes of CCTV footage every day, but most of this data remains unused.
+```bash
+git clone <repo-url> store-intelligence && cd store-intelligence
+pip install -r requirements.txt
+python scripts/load_pos.py
+uvicorn app.main:app --reload
+streamlit run dashboard/streamlit_app.py
+```
 
-This project converts video streams into structured events and analytics that help answer business questions such as:
+Then open:
+- API docs: http://localhost:8000/docs
+- Dashboard: http://localhost:8501 (auto-discovers available stores)
+- Health check: http://localhost:8000/health
 
-* How many customers entered the store?
-* Which areas receive the highest engagement?
-* How long do customers spend browsing products?
-* Which zones contribute most to conversions?
-* What is the relationship between customer traffic and revenue?
+## Verify the acceptance gate
+
+```bash
+# Run the 10 assertion checks
+python assertions.py http://localhost:8000
+```
+
+All 10 must pass before scoring begins.
 
 ---
 
-## Features Implemented
+## Docker (zero manual steps)
 
-### Backend Analytics
+```bash
+docker compose up
+```
 
-* Event Ingestion API
-* Session Builder
-* Store Metrics API
-* Funnel Analytics API
-* Heatmap Analytics API
-* Anomaly Detection API
-* POS Transaction Integration
-* SQLite Data Persistence
+Services:
+- `api` → http://localhost:8000
+- `dashboard` → http://localhost:8501
 
-### Computer Vision Pipeline
+---
 
-* YOLOv8 Person Detection
-* ByteTrack Multi-Object Tracking
-* Entry Detection
-* Exit Detection
-* Zone Analytics
-* Dwell Time Analytics
-* CV Event Persistence
+## Running the Detection Pipeline
 
-### Event Types Generated
+### Prerequisites
 
-* ENTRY
-* EXIT
-* ZONE_CHANGE
-* DWELL_TIME
+Place video clips in `pipeline/inputs/` following this structure:
+
+```
+pipeline/inputs/
+  Store 1/
+    CAM 3 - entry.mp4        ← entry/exit camera
+    CAM 1 - zone.mp4         ← floor zone camera
+    CAM 5 - billing.mp4      ← billing area camera
+  Store 2/
+    entry 2.mp4
+    zone.mp4
+    billing_area.mp4
+```
+
+### Process clips and feed into the API
+
+```bash
+# Start the API first
+uvicorn app.main:app --reload
+
+# In a second terminal — process Store 2 clips and ingest into API
+python -m pipeline.run_pipeline --store STORE_BLR_002 --api http://localhost:8000
+
+# Or write events to a JSONL file first, then replay
+python -m pipeline.run_pipeline --store STORE_BLR_002 --output pipeline/outputs/events.jsonl
+```
+
+### Windows batch runner
+
+```bat
+run.bat STORE_BLR_002 http://localhost:8000
+```
+
+### Unix/Mac
+
+```bash
+./run.sh STORE_BLR_002 http://localhost:8000
+```
+
+### Pipeline options
+
+```
+python -m pipeline.run_pipeline --help
+
+  --store     Store ID from store_layout.json (default: STORE_BLR_002)
+  --api       API base URL to POST events to (e.g. http://localhost:8000)
+  --output    JSONL output file path (alternative to --api)
+  --display   Show OpenCV debug windows while processing
+```
+
+### Replaying a JSONL file
+
+```bash
+python scripts/replay_events.py pipeline/outputs/events.jsonl http://localhost:8000
+```
+
+---
+
+## Part E — Live Dashboard (Real-Time Replay)
+
+To demonstrate live pipeline → API → dashboard connectivity, use the simulated real-time replay:
+
+```bash
+# Terminal 1: start the API
+uvicorn app.main:app --reload
+
+# Terminal 2: start the dashboard
+streamlit run dashboard/streamlit_app.py
+
+# Terminal 3: replay sample events in real time (60x speed = 20min footage in ~20s)
+python -m pipeline.simulate_realtime --file data/sample_events.jsonl --raw --store ST1076 --speed 60
+
+# Or replay your own processed events
+python -m pipeline.simulate_realtime --store STORE_BLR_002 --speed 60
+```
+
+Watch the dashboard update live as events flow in. The terminal shows a live metric display simultaneously.
+
+Dashboard URL: **http://localhost:8501**
+
+---
+
+## API Reference
+
+### Acceptance Gate Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/events/ingest` | Ingest up to 500 events; idempotent by `event_id` |
+| `GET` | `/stores/{store_id}/metrics` | Real-time KPIs: visitors, conversion, dwell, queue depth |
+| `GET` | `/stores/{store_id}/funnel` | 4-stage conversion funnel with drop-off % |
+| `GET` | `/stores/{store_id}/heatmap` | Zone visit frequency + dwell, normalised 0-100 |
+| `GET` | `/stores/{store_id}/anomalies` | Active anomalies with severity and suggested actions |
+| `GET` | `/health` | Service health, per-store last event timestamp, stale feed warnings |
+
+### Quick test
+
+```bash
+# Ingest a test event
+curl -X POST http://localhost:8000/events/ingest \
+  -H "Content-Type: application/json" \
+  -d '[{
+    "event_id": "550e8400-e29b-41d4-a716-446655440000",
+    "visitor_id": "VIS_001001",
+    "store_id": "STORE_BLR_002",
+    "camera_id": "CAM_ENTRY_01",
+    "event_type": "ENTRY",
+    "timestamp": "2026-03-03T14:22:10Z",
+    "zone_id": null,
+    "dwell_ms": 0,
+    "is_staff": false,
+    "confidence": 0.91,
+    "metadata": {"session_seq": 1}
+  }]'
+
+# Check metrics
+curl http://localhost:8000/stores/STORE_BLR_002/metrics
+
+# Check health
+curl http://localhost:8000/health
+```
+
+---
+
+## Running Tests
+
+```bash
+# Full test suite
+pytest tests/ -v
+
+# With coverage report
+pytest tests/ --cov=app --cov-report=term-missing
+
+# Single test file
+pytest tests/test_ingest.py -v
+```
 
 ---
 
 ## Architecture
 
-```text
-Store Cameras
-      │
-      ▼
-YOLOv8 Detection
-      │
-      ▼
-ByteTrack Tracking
-      │
-      ▼
-Event Generator
-      │
-      ▼
-SQLite Database
-      │
-      ▼
+```
+CCTV Footage (mp4)
+     │
+     ▼
+YOLOv8n — person detection (class_id=0 filter)
+     │
+     ▼
+ByteTrack — multi-object tracking (lost_track_buffer=90)
+     │
+     ▼
+EventGenerator — ENTRY/EXIT/ZONE_ENTER/ZONE_DWELL/BILLING events
+     │  (visitor_id, confidence, session_seq, is_staff heuristic)
+     ▼
+POST /events/ingest (batches of 100, idempotent)
+     │
+     ▼
+SQLite (events + sessions + pos_transactions tables)
+     │
+     ▼
 FastAPI Analytics Layer
-      │
-      ▼
-Dashboard / Business Insights
+  ├── /metrics   — KPIs + POS correlation
+  ├── /funnel    — session-based 4-stage funnel
+  ├── /heatmap   — normalised zone heat scores
+  ├── /anomalies — 5 anomaly detectors
+  └── /health    — stale feed detection
+     │
+     ▼
+Streamlit Dashboard (10s live refresh)
+```
+
+---
+
+## Event Schema
+
+```json
+{
+  "event_id": "uuid-v4",
+  "store_id": "STORE_BLR_002",
+  "camera_id": "CAM_ENTRY_01",
+  "visitor_id": "VIS_c8a2f1",
+  "event_type": "ZONE_DWELL",
+  "timestamp": "2026-03-03T14:22:10Z",
+  "zone_id": "LEFT_SHELF",
+  "zone_name": "LEFT_SHELF",
+  "dwell_ms": 8400,
+  "is_staff": false,
+  "confidence": 0.91,
+  "metadata": {
+    "queue_depth": null,
+    "sku_zone": "MOISTURISER",
+    "session_seq": 5
+  }
+}
+```
+
+### Event type catalogue
+
+| Event Type | When Emitted |
+|------------|-------------|
+| `ENTRY` | Visitor crosses entry threshold inbound |
+| `EXIT` | Visitor crosses entry threshold outbound |
+| `REENTRY` | Same visitor seen after a prior EXIT (within 5 min) |
+| `ZONE_ENTER` | Visitor enters a named zone |
+| `ZONE_EXIT` | Visitor leaves a named zone |
+| `ZONE_DWELL` | Visitor has been in zone continuously for 30+ seconds |
+| `BILLING_QUEUE_JOIN` | Visitor enters billing zone while queue_depth > 0 |
+| `BILLING_QUEUE_ABANDON` | Visitor leaves billing zone before a POS transaction |
+
+---
+
+## Project Structure
+
+```
+store-intelligence/
+├── app/
+│   ├── api/
+│   │   ├── ingest.py       ← POST /events/ingest
+│   │   ├── metrics.py      ← GET /stores/{id}/metrics
+│   │   ├── funnel.py       ← GET /stores/{id}/funnel
+│   │   ├── heatmap.py      ← GET /stores/{id}/heatmap
+│   │   ├── anomalies.py    ← GET /stores/{id}/anomalies
+│   │   ├── health.py       ← GET /health
+│   │   ├── cv.py           ← GET /cv/summary,zones,dwell
+│   │   └── debug.py        ← GET /debug/sessions
+│   ├── models/
+│   │   ├── event.py        ← Pydantic ingest model
+│   │   ├── db_event.py     ← SQLAlchemy EventDB
+│   │   ├── session.py      ← SQLAlchemy SessionDB
+│   │   ├── pos_transaction.py
+│   │   └── cv_event.py     ← Legacy CV events table
+│   ├── services/
+│   │   ├── session_service.py   ← Session lifecycle from events
+│   │   ├── metrics_service.py   ← KPI computation + POS correlation
+│   │   ├── funnel_service.py    ← 4-stage funnel
+│   │   ├── heatmap_service.py   ← Normalised zone heatmap
+│   │   └── anomaly_service.py   ← 5 anomaly detectors
+│   ├── database.py
+│   └── main.py             ← FastAPI app + middleware
+├── pipeline/
+│   ├── run_pipeline.py     ← Master runner (all clips → API)
+│   ├── detector.py         ← YOLOv8 + ByteTrack wrapper
+│   ├── event_generator.py  ← Frame detections → structured events
+│   ├── session_manager.py  ← In-pipeline visitor session state
+│   ├── run_entry_event.py  ← Legacy: entry detection script
+│   ├── run_zone.py         ← Legacy: zone tracking script
+│   ├── run_dwell_time.py   ← Legacy: dwell time script
+│   └── inputs/             ← Place mp4 clips here
+├── dashboard/
+│   └── streamlit_app.py    ← Live dashboard (10s auto-refresh)
+├── data/
+│   ├── store_layout.json   ← Zone definitions per store
+│   └── POS - sample transactionsb1e826f.csv
+├── scripts/
+│   ├── load_pos.py         ← Load POS CSV into DB
+│   └── check_cv_events.py  ← Inspect CV events in DB
+├── tests/
+│   ├── test_ingest.py
+│   ├── test_metrics.py
+│   ├── test_funnel.py
+│   ├── test_heatmap.py
+│   ├── test_anomalies.py
+│   └── test_health.py
+├── Dockerfile
+├── Dockerfile.dashboard
+├── docker-compose.yml
+├── run.sh / run.bat        ← One-command pipeline runner
+├── DESIGN.md
+├── CHOICES.md
+└── requirements.txt
 ```
 
 ---
 
 ## Technology Stack
 
-### Backend
-
-* FastAPI
-* SQLAlchemy
-* SQLite
-
-### Computer Vision
-
-* YOLOv8
-* OpenCV
-* Supervision
-* ByteTrack
-
-### Data Processing
-
-* Pandas
-* NumPy
-
-### APIs
-
-* REST APIs
-* JSON Event Pipeline
-
----
-
-## Project Structure
-
-```text
-store-intelligence/
-
-├── app/
-│   ├── api/
-│   ├── models/
-│   ├── database.py
-│   └── main.py
-│
-├── pipeline/
-│   ├── run_entry_event.py
-│   ├── run_zone.py
-│   ├── run_dwell_time.py
-│   ├── event_writer.py
-│   ├── tracker.py
-│   └── zones.py
-│
-├── scripts/
-│   ├── load_pos.py
-│   ├── test_cv_event.py
-│   └── check_cv_events.py
-│
-└── README.md
-```
-
----
-
-## Computer Vision Pipeline
-
-### Entry Detection
-
-The entry camera is processed using:
-
-* YOLOv8 person detection
-* ByteTrack tracking
-* Virtual line-crossing logic
-
-Generated events:
-
-```json
-{
-  "event_type": "ENTRY",
-  "track_id": 21
-}
-```
-
-```json
-{
-  "event_type": "EXIT",
-  "track_id": 21
-}
-```
-
----
-
-### Zone Analytics
-
-Store zones are defined as:
-
-* LEFT_SHELF
-* CENTER_AISLE
-* RIGHT_SHELF
-
-Zone transition example:
-
-```json
-{
-  "event_type": "ZONE_CHANGE",
-  "track_id": 9,
-  "from": "CENTER_AISLE",
-  "to": "RIGHT_SHELF"
-}
-```
-
----
-
-### Dwell Time Analytics
-
-Measures customer engagement within store zones.
-
-Example:
-
-```json
-{
-  "event_type": "DWELL_TIME",
-  "track_id": 15,
-  "zone": "CENTER_AISLE",
-  "seconds": 0.44
-}
-```
-
----
-
-## Database Schema
-
-### Event Table
-
-Stores raw event data from the challenge dataset.
-
-### Session Table
-
-Stores visitor sessions and session analytics.
-
-### POS Transactions Table
-
-Stores purchase information and revenue data.
-
-### CV Events Table
-
-Stores generated computer vision events.
-
-Fields:
-
-* event_type
-* track_id
-* zone
-* value
-* timestamp
-
----
-
-## APIs
-
-### Event Ingestion
-
-```http
-POST /events/ingest
-```
-
-Ingests store events into the system.
-
----
-
-### Store Metrics
-
-```http
-GET /stores/{store_id}/metrics
-```
-
-Returns:
-
-* Revenue
-* Transactions
-* Conversion metrics
-
----
-
-### Funnel Analytics
-
-```http
-GET /stores/{store_id}/funnel
-```
-
-Provides visitor funnel statistics.
-
----
-
-### Heatmap Analytics
-
-```http
-GET /stores/{store_id}/heatmap
-```
-
-Returns zone activity information.
-
----
-
-### Anomaly Analytics
-
-```http
-GET /stores/{store_id}/anomalies
-```
-
-Detects unusual store activity.
-
----
-
-### CV Summary
-
-```http
-GET /cv/summary
-```
-
-Returns:
-
-```json
-{
-  "entries": 11,
-  "exits": 3,
-  "zone_changes": 3,
-  "dwell_events": 3
-}
-```
-
----
-
-### Zone Analytics
-
-```http
-GET /cv/zones
-```
-
-Returns zone transition counts.
-
----
-
-### Dwell Analytics
-
-```http
-GET /cv/dwell
-```
-
-Returns cumulative dwell times by zone.
-
----
-
-## Sample Analytics
-
-### Store Metrics
-
-```json
-{
-  "store_id": "ST1008",
-  "unique_visitors": 0,
-  "total_revenue": 34331.71,
-  "total_transactions": 101,
-  "conversion_rate": 0
-}
-```
-
-### CV Summary
-
-```json
-{
-  "entries": 11,
-  "exits": 3,
-  "zone_changes": 3,
-  "dwell_events": 3
-}
-```
-
----
-
-## Running the Project
-
-### Create Virtual Environment
-
-```bash
-python -m venv venv
-```
-
-### Activate
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-### Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Run Backend
-
-```bash
-uvicorn app.main:app --reload
-```
-
-Swagger:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
----
-
-## Future Improvements
-
-* Real-time video streaming
-* Queue analytics
-* Billing area intelligence
-* Cross-camera re-identification
-* Streamlit dashboard
-* Kafka-based event streaming
-* Multi-store analytics
-* Real-time alerting
-
----
-
-## Challenge Compliance
-
-The repository intentionally excludes:
-
-* CCTV videos
-* Raw datasets
-* Large model files
-
-in accordance with the challenge guidelines.
+| Layer | Technology |
+|-------|-----------|
+| Detection | YOLOv8n (ultralytics) |
+| Tracking | ByteTrack (supervision) |
+| API Framework | FastAPI |
+| ORM | SQLAlchemy 2.x |
+| Database | SQLite (swappable to PostgreSQL) |
+| Data Processing | Pandas, NumPy |
+| Dashboard | Streamlit |
+| Testing | pytest + httpx |
+| Containerisation | Docker + docker-compose |
 
 ---
 
 ## Author
 
-Anshika Shrivastava
-
-Purplle Tech Challenge 2026 Submission
+Anshika Shrivastava — Purplle Tech Challenge 2026
